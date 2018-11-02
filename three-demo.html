@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset=utf-8>
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { width: 100%; height: 100% }
+		</style>
+	</head>
+	<body>
+		<!-- https://github.com/jackunion/tooloud -->
+		<script src="js/three.js"></script>
+		<script src="js/WebGL.js"></script>
+    <script src="js/tooloud.js"></script>
+		<script>
+		  console.log('hello three js');
+			console.log(tooloud);
+
+
+      // reference
+			// https://codepen.io/seanfree/pen/aJKeWK
+
+
+			// CONSTANTS
+			var SCENE, SCENE_WIDTH, SCENE_HEIGHT, CAMERA;
+			SCENE = new THREE.Scene();
+			setSceneSize();
+
+      CAMERA = new THREE.PerspectiveCamera( 75, SCENE_WIDTH / SCENE_HEIGHT, 0.1, 1000 );
+
+
+
+      // VARS
+			var renderer;
+      renderer = new THREE.WebGLRenderer();
+			// set renderer
+			renderer.setPixelRatio( window.devicePixelRatio );
+			renderer.setSize( SCENE_WIDTH, SCENE_HEIGHT );
+			document.body.appendChild( renderer.domElement );
+
+			var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+
+
+			// Objects
+			var objects = {
+
+				terrain: {
+					mesh: undefined,
+					textureURL: 'grass1.jpg',
+					materialProps: {color: 0xdfdfdf, side: THREE.DoubleSide, map: undefined},
+					geometryProps: {width: 400, height: 400},
+				},
+
+			};
+
+
+
+
+
+
+
+
+      // Kicks off app by checking if webgl is supported by the browser
+      if (WEBGL.isWebGLAvailable()) {
+        beginLoading();
+      } else {
+        document.body.appendChild(WEBGL.getWebGLErrorMessage());
+      }
+
+
+
+			function beginLoading(){
+				console.log('..begin loading materials');
+				// if the object has a texture, load images then create material for that object
+				var loader = new THREE.TextureLoader();
+				loader.setCrossOrigin(null);
+				// load a resource
+				for(var obj in objects){
+					if(objects[obj].textureURL){
+
+						loader.load(objects[obj].textureURL,
+						  // onLoad callback
+						  function (texture) {
+							  objects[obj].texture = texture;
+								startApp();
+						  },
+						  // onProgress callback currently not supported
+						  undefined,
+						  // onError callback
+						  function ( err ) {
+								console.log(err);
+							  console.error( 'An error happened.' );
+						  }
+					  );
+
+
+					}
+				}
+			}
+
+
+
+     function startApp(){
+			 console.log('starting up application..');
+			 init();
+			 animate();
+		 }
+
+		 function setSceneSize(){
+ 		   SCENE_WIDTH = window.innerWidth;
+ 			 SCENE_HEIGHT = window.innerHeight;
+ 		 }
+
+
+     function initLights() {
+       // light = new THREE.HemisphereLight( 0xffffbb, 0x080820, 1 );
+			 // scene.add(light);
+
+			 // var ambientLight = new THREE.AmbientLight(0xaaccff, 0.35);
+			 var light = new THREE.PointLight( 0xffffff, 1, 200 );
+       light.position.set( 0, 20, 0 );
+       light.castShadow = true;
+
+			 // var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.6 );
+			// directionalLight.position.set( - 1, 1, 1 );
+			// SCENE.add( directionalLight );
+
+       SCENE.add( light );
+			 // ambientLight.position.set(-200, -100, 200);
+			 // scene.add(ambientLight);
+			 // var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+			 // directionalLight.flatShading = true;
+       // scene.add( directionalLight );
+		 }
+
+     function createTerrain() {
+			 var terrain, texture, gp, geometry, material, mesh;
+			 terrain = objects.terrain;
+			 texture = terrain.texture;
+			 texture.needsUpdate = true;
+			 texture.anisotropy = maxAnisotropy;
+			 texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+			 texture.repeat.set(100,100);
+			 gp = terrain.geometryProps;
+			 geometry = new THREE.PlaneGeometry( gp.width, gp.height, gp.width, gp.height )
+			 terrain.materialProps.map = texture;
+       material = new THREE.MeshLambertMaterial( terrain.materialProps );
+			 geometry.verticesNeedUpdate = true;
+			 for (let i = 0; i < geometry.vertices.length; i++){
+				 var vert = geometry.vertices[i];
+				 vert.z = tooloud.Perlin.noise(vert.x * .125, vert.y * .03, vert.z * .01)*10;
+				 vert.z = tooloud.Perlin.noise(vert.x * .05, vert.y * .05, vert.z * .01)*20;
+			 }
+       mesh = new THREE.Mesh( geometry, material );
+			 mesh.rotation.x = 90;
+			 objects.terrain.mesh = mesh;
+			 SCENE.add(objects.terrain.mesh);
+		 }
+
+
+     function init() {
+
+       createTerrain();
+			 initLights();
+
+  		 CAMERA.position.z = 200;
+			 CAMERA.lookAt(objects.terrain.mesh.position);
+
+
+     }
+
+
+
+
+
+
+
+			function animate() {
+				requestAnimationFrame( animate );
+
+				objects.terrain.mesh.rotation.z += 0.005;
+				renderer.render( SCENE, CAMERA );
+			};
+
+		</script>
+	</body>
+</html>
