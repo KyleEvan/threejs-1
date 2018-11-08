@@ -2,53 +2,53 @@
 <html>
 	<head>
 		<meta charset=utf-8>
-		<title>My first three.js app</title>
+		<title>My first scene</title>
 		<style>
 			body { margin: 0; }
-			canvas { width: 100%; height: 100% }
+			canvas {
+				width: 100%;
+				height: 100%
+				cursor: move; /* fallback if grab cursor is unsupported */
+	      cursor: grab;
+	      cursor: -moz-grab;
+	      cursor: -webkit-grab;
+			}
+			canvas:active{
+				cursor: grabbing;
+	      cursor: -moz-grabbing;
+	      cursor: -webkit-grabbing;
+			}
+
 		</style>
 	</head>
 	<body>
+
+
+    <div id="scene" class="grabbable"></div>
+
+
+
 		<!-- https://github.com/jackunion/tooloud -->
 		<script src="js/three.js"></script>
+		<script src="js/OrbitControls.js"></script>
 		<script src="js/WebGL.js"></script>
     <script src="js/tooloud.js"></script>
 		<script>
-		  console.log('hello three js');
-			console.log(tooloud);
 
 
-      // reference
+      // references
+			// https://threejs.org/editor/
 			// https://codepen.io/seanfree/pen/aJKeWK
 
-
-			// CONSTANTS
-			var SCENE, SCENE_WIDTH, SCENE_HEIGHT, CAMERA;
-			SCENE = new THREE.Scene();
-			setSceneSize();
-
-      CAMERA = new THREE.PerspectiveCamera( 75, SCENE_WIDTH / SCENE_HEIGHT, 0.1, 1000 );
-
-
-
-      // VARS
-			var renderer;
-      renderer = new THREE.WebGLRenderer();
-			// set renderer
-			renderer.setPixelRatio( window.devicePixelRatio );
-			renderer.setSize( SCENE_WIDTH, SCENE_HEIGHT );
-			document.body.appendChild( renderer.domElement );
-
-			var maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-
+      var container = document.getElementById('scene');
 
 			// Objects
 			var objects = {
 
 				terrain: {
 					mesh: undefined,
-					textureURL: 'grass1.jpg',
-					materialProps: {color: 0xdfdfdf, side: THREE.DoubleSide, map: undefined},
+					textureURL: 'file:///C:/Users/kpeterso/Desktop/threeJS/grass3.jpg',
+					materialProps: {color: 0xdfdfdf, side: THREE.DoubleSide, map: undefined, flatShading: true},
 					geometryProps: {width: 400, height: 400},
 				},
 
@@ -56,17 +56,67 @@
 
 
 
+			// CONSTANTS
+			var SCENE, CAMERA, CONTROLS, RENDERER;
+			// Vars
+      var sceneWidth, sceneHeight, aspect, clock, grabbing;
+			SCENE = new THREE.Scene();
+			clock = new THREE.Clock();
+
+			setSceneSize();
+			setCameraAspect();
+
+			initCamera();
 
 
 
 
 
-      // Kicks off app by checking if webgl is supported by the browser
-      if (WEBGL.isWebGLAvailable()) {
-        beginLoading();
-      } else {
-        document.body.appendChild(WEBGL.getWebGLErrorMessage());
-      }
+      var canvas = document.createElement('canvas');
+			var context = canvas.getContext('webgl2');
+			RENDERER = new THREE.WebGLRenderer({canvas: canvas, context: context});
+
+			RENDERER.setPixelRatio( window.devicePixelRatio );
+			RENDERER.setSize( sceneWidth, sceneHeight );
+			container.appendChild( RENDERER.domElement );
+
+			var maxAnisotropy = RENDERER.capabilities.getMaxAnisotropy();
+
+			// var controls = new THREE.OrbitControls( CAMERA, RENDERER.domElement );
+			// controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+			// controls.dampingFactor = 0.4;
+			// controls.screenSpacePanning = false;
+
+
+
+      // EVENTS
+			var mouseX, mouseY;
+			function onMousemove(e){
+        mouseX = (e.clientX - (container.clientWidth/2))/(container.clientWidth/2);
+				mouseY = (e.clientY - (container.clientHeight/2))/(container.clientHeight/2);
+			}
+			function onMousedown(){
+				grabbing = true;
+			}
+			function onMouseup(){
+				grabbing = false;
+			}
+
+
+			function onResize(){
+				console.log('resizing');
+				setSceneSize();
+				setCameraAspect();
+				CAMERA.updateProjectionMatrix();
+				RENDERER.setSize( sceneWidth, sceneHeight );
+			}
+
+
+
+
+
+
+
 
 
 
@@ -74,114 +124,232 @@
 				console.log('..begin loading materials');
 				// if the object has a texture, load images then create material for that object
 				var loader = new THREE.TextureLoader();
-				loader.setCrossOrigin(null);
+				// loader.setCrossOrigin(null);
 				// load a resource
 				for(var obj in objects){
 					if(objects[obj].textureURL){
-
 						loader.load(objects[obj].textureURL,
-						  // onLoad callback
+						  // onLoad
 						  function (texture) {
 							  objects[obj].texture = texture;
 								startApp();
 						  },
-						  // onProgress callback currently not supported
+						  // onProgress
 						  undefined,
-						  // onError callback
+						  // onError
 						  function ( err ) {
 								console.log(err);
 							  console.error( 'An error happened.' );
 						  }
 					  );
-
-
 					}
 				}
 			}
 
 
 
+
+			function initScene(){
+        // Add objects to scene
+				createTerrain();
+ 			  initLights();
+
+				// Config Camera
+ 			  CAMERA.lookAt(objects.terrain.mesh.position);
+
+				// Events
+				window.addEventListener('resize', onResize, false);
+				container.addEventListener('mousemove', onMousemove, false);
+				container.addEventListener('mousedown', onMousedown, false);
+				container.addEventListener('mouseup', onMouseup, false);
+      }
+
+
+
+
+			function render(){
+				RENDERER.render( SCENE, CAMERA );
+			}
+ 			function animate(){
+ 				requestAnimationFrame( animate );
+
+        var delta = clock.getDelta();
+        updateControls(delta);
+				updateTerrain();
+
+
+				render();
+ 			}
+
+
+     /* App functions */
      function startApp(){
 			 console.log('starting up application..');
-			 init();
+			 initScene();
 			 animate();
 		 }
 
+
+
+
+
+
+
 		 function setSceneSize(){
- 		   SCENE_WIDTH = window.innerWidth;
- 			 SCENE_HEIGHT = window.innerHeight;
+ 		   sceneWidth = window.innerWidth;
+ 			 sceneHeight = window.innerHeight;
  		 }
+
+     function setCameraAspect(){
+			 aspect = sceneWidth/sceneHeight;
+			 if(CAMERA) CAMERA.aspect = aspect;
+		 }
+
+
+
+
+
+
+
+/*
+
+     - Update camera controls -
+		 Trying to smooth camera movement with cosine interpolation concepts
+
+		 double CosineInterpolate(
+				double y1,double y2,
+				double mu)
+		 {
+				double mu2;
+
+				mu2 = (1-cos(mu*PI))/2;
+				return(y1*(1-mu2)+y2*mu2);
+		 }
+
+*/
+     var timer = 0;
+		 var dof = Math.PI/-4; // degrees of freedom
+		 var interval = 5/1000;
+		 var positions = {
+			 x0: container.clientWidth/2,
+			 x1: 0,
+			 y0: container.clientHeight/2,
+			 y1: 0
+		 };
+
+		 function updateControls(delta){
+			 timer += delta;
+
+       positions.x1 = mouseX*dof;
+       positions.y1 = mouseY*dof;
+
+			 // CONTROLS.rotation.x = positions.y1;
+			 // CONTROLS.rotation.y = positions.x1;
+
+			 var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
+			 var rotX = (positions.y0*(1-mu2X)+positions.y1*mu2X);
+
+			 var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
+			 var rotY = (positions.x0*(1-mu2Y)+positions.x1*mu2Y);
+
+			 CONTROLS.rotation.x = rotX;
+			 CONTROLS.rotation.y = rotY;
+
+			 // degrees of freedom, in radians
+			 if(timer > interval){
+				 console.log('updating mouse');
+
+				 timer = 0;
+				 positions.x0 = positions.x1;
+	       positions.y0 = positions.y1;
+			 }
+		 }
+
+
+
+
+
+
+     function initCamera() {
+			 var geometry = new THREE.BoxBufferGeometry( 1, 1, 1 );
+       var material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
+       CONTROLS = new THREE.Mesh( geometry, material );
+
+			 CAMERA = new THREE.PerspectiveCamera( 60, aspect, 0.1, 1000 );
+ 			 CONTROLS.position.set(0, 20, 400);
+			 CONTROLS.add(CAMERA);
+			 SCENE.add(CONTROLS);
+		 }
+
 
 
      function initLights() {
-       // light = new THREE.HemisphereLight( 0xffffbb, 0x080820, 1 );
-			 // scene.add(light);
-
-			 // var ambientLight = new THREE.AmbientLight(0xaaccff, 0.35);
-			 var light = new THREE.PointLight( 0xffffff, 1, 200 );
-       light.position.set( 0, 20, 0 );
+			 var light = new THREE.PointLight( 0xffffff, 2, 300 );
+       light.position.set( 0, 100, 0 );
        light.castShadow = true;
-
-			 // var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.6 );
-			// directionalLight.position.set( - 1, 1, 1 );
-			// SCENE.add( directionalLight );
-
        SCENE.add( light );
-			 // ambientLight.position.set(-200, -100, 200);
-			 // scene.add(ambientLight);
-			 // var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
-			 // directionalLight.flatShading = true;
-       // scene.add( directionalLight );
 		 }
 
-     function createTerrain() {
+
+
+
+     function updateTerrain(){
+			 var rotZ = Math.PI/1000;
+			 if(!grabbing) objects.terrain.mesh.rotation.z += rotZ;
+
+
+		 }
+
+     function createTerrain(){
+       /*
+
+			   Elliptic paraboloid equation
+				 z = -x^2 + y^2
+
+			 */
 			 var terrain, texture, gp, geometry, material, mesh;
 			 terrain = objects.terrain;
 			 texture = terrain.texture;
 			 texture.needsUpdate = true;
 			 texture.anisotropy = maxAnisotropy;
 			 texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-			 texture.repeat.set(100,100);
+			 texture.repeat.set(50,50);
 			 gp = terrain.geometryProps;
-			 geometry = new THREE.PlaneGeometry( gp.width, gp.height, gp.width, gp.height )
+			 geometry = new THREE.PlaneGeometry( gp.width, gp.height, gp.width/2.5, gp.height/2.5 );
 			 terrain.materialProps.map = texture;
        material = new THREE.MeshLambertMaterial( terrain.materialProps );
 			 geometry.verticesNeedUpdate = true;
+
+       var s = 18;
+
 			 for (let i = 0; i < geometry.vertices.length; i++){
 				 var vert = geometry.vertices[i];
-				 vert.z = tooloud.Perlin.noise(vert.x * .125, vert.y * .03, vert.z * .01)*10;
-				 vert.z = tooloud.Perlin.noise(vert.x * .05, vert.y * .05, vert.z * .01)*20;
+				 vert.z = Math.pow(-vert.x/s, 2) + Math.pow(vert.y/s, 2);
+				 vert.z += tooloud.Perlin.noise(vert.x * .125, vert.y * .03, vert.z * .01)*10;
+				 vert.z += tooloud.Perlin.noise(vert.x * .05, vert.y * .05, vert.z * .01)*20;
 			 }
        mesh = new THREE.Mesh( geometry, material );
 			 mesh.rotation.x = 90;
+			 mesh.position.set(0,0,0);
 			 objects.terrain.mesh = mesh;
-			 SCENE.add(objects.terrain.mesh);
+			 // var helper = new THREE.VertexNormalsHelper( mesh, 2, 0x00ff00, 1 );
+			 SCENE.add(mesh);
+			 // SCENE.add(helper);
 		 }
 
 
-     function init() {
-
-       createTerrain();
-			 initLights();
-
-  		 CAMERA.position.z = 200;
-			 CAMERA.lookAt(objects.terrain.mesh.position);
-
-
-     }
 
 
 
 
 
+		 // If webgl is supported by the browser, start up app
+		 if ( WEBGL.isWebGLAvailable() === false ) {
+			 document.body.appendChild( WEBGL.getWebGLErrorMessage() );
+		 }else{
+			 beginLoading();
+		 }
 
-
-			function animate() {
-				requestAnimationFrame( animate );
-
-				objects.terrain.mesh.rotation.z += 0.005;
-				renderer.render( SCENE, CAMERA );
-			};
 
 		</script>
 	</body>
