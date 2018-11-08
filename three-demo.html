@@ -24,7 +24,7 @@
 	<body>
 
 
-    <div id="scene" class="grabbable"></div>
+    <div id="scene"></div>
 
 
 
@@ -40,9 +40,12 @@
 			// https://threejs.org/editor/
 			// https://codepen.io/seanfree/pen/aJKeWK
 
+
+
+      // Element to render three js to
       var container = document.getElementById('scene');
 
-			// Objects
+			// Scene objects
 			var objects = {
 
 				terrain: {
@@ -57,22 +60,103 @@
 
 
 			// CONSTANTS
-			var SCENE, CAMERA, CONTROLS, RENDERER;
-			// Vars
-      var sceneWidth, sceneHeight, aspect, clock, grabbing;
+			var SCENE, CAMERA, RENDERER;
 			SCENE = new THREE.Scene();
-			clock = new THREE.Clock();
+      // Global vars
+			var controls, sceneWidth, sceneHeight, aspect, clock, mouseX, mouseY, grabbing;
 
+
+
+			/*
+
+			     - Update camera controls -
+					 Trying to smooth camera movement with cosine interpolation concepts
+
+					 double CosineInterpolate(
+							double y1,double y2,
+							double mu)
+					 {
+							double mu2;
+
+							mu2 = (1-cos(mu*PI))/2;
+							return(y1*(1-mu2)+y2*mu2);
+					 }
+
+			*/
+			function Controls(x, y, z){
+				this.camera = undefined;
+			  this.frames = 0;
+				this.delta = 0;
+				this.dof = Math.PI/-4;
+				this.interval = 1/90;
+				this.lookPositions = {
+					x0: container.clientWidth/2,
+					x1: 0,
+					y0: container.clientHeight/2,
+					y1: 0
+				};
+				this.init = function(){
+					console.log(this);
+					this.geometry = new THREE.BoxBufferGeometry( 1, 1, 1 );
+					this.material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
+					this.mesh = new THREE.Mesh( this.geometry, this.material );
+					this.camera = new THREE.PerspectiveCamera( 60, aspect, 0.1, 1000 );
+					this.mesh.position.set(x, y, z);
+					this.mesh.add(this.camera);
+					SCENE.add(this.mesh);
+				}
+				this.update = function(d){
+				  console.log('updating controls');
+					this.delta += d;
+	        this.frames++;
+	        this.lookPositions.x1 = mouseX*this.dof;
+	        this.lookPositions.y1 = mouseY*this.dof;
+	 			 // CONTROLS.rotation.x = positions.y1;
+	 			 // CONTROLS.rotation.y = positions.x1;
+
+	 			 var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
+	 			 var rotX = (this.lookPositions.y0*(1-mu2X)+this.lookPositions.y1*mu2X);
+
+	 			 var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
+	 			 var rotY = (this.lookPositions.x0*(1-mu2Y)+this.lookPositions.x1*mu2Y);
+
+	 			 this.mesh.rotation.x = rotX;
+	 			 this.mesh.rotation.y = rotY;
+
+	 			 if(this.delta > this.interval){
+	         console.log(this.frames);
+	 				 this.delta = this.frames = 0;
+	 				 this.lookPositions.x0 = this.lookPositions.x1;
+	 	       this.lookPositions.y0 = this.lookPositions.y1;
+	 			 }
+				}
+			}
+
+
+
+
+
+			function setSceneSize(){
+  		  sceneWidth = window.innerWidth;
+  		  sceneHeight = window.innerHeight;
+  		}
+      function setCameraAspect(){
+ 			  aspect = sceneWidth/sceneHeight;
+ 			  if(controls) controls.camera.aspect = aspect;
+ 		  }
+
+
+
+			clock = new THREE.Clock();
 			setSceneSize();
 			setCameraAspect();
 
-			initCamera();
+			controls = new Controls(0, 20, 400);
+			controls.init();
 
 
 
-
-
-      var canvas = document.createElement('canvas');
+			var canvas = document.createElement('canvas');
 			var context = canvas.getContext('webgl2');
 			RENDERER = new THREE.WebGLRenderer({canvas: canvas, context: context});
 
@@ -82,15 +166,13 @@
 
 			var maxAnisotropy = RENDERER.capabilities.getMaxAnisotropy();
 
-			// var controls = new THREE.OrbitControls( CAMERA, RENDERER.domElement );
-			// controls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
-			// controls.dampingFactor = 0.4;
-			// controls.screenSpacePanning = false;
+
+
+
 
 
 
       // EVENTS
-			var mouseX, mouseY;
 			function onMousemove(e){
         mouseX = (e.clientX - (container.clientWidth/2))/(container.clientWidth/2);
 				mouseY = (e.clientY - (container.clientHeight/2))/(container.clientHeight/2);
@@ -155,7 +237,7 @@
  			  initLights();
 
 				// Config Camera
- 			  CAMERA.lookAt(objects.terrain.mesh.position);
+ 			  controls.camera.lookAt(objects.terrain.mesh.position);
 
 				// Events
 				window.addEventListener('resize', onResize, false);
@@ -168,15 +250,13 @@
 
 
 			function render(){
-				RENDERER.render( SCENE, CAMERA );
+				RENDERER.render( SCENE, controls.camera );
 			}
  			function animate(){
  				requestAnimationFrame( animate );
 
-        var delta = clock.getDelta();
-        updateControls(delta);
+        controls.update( clock.getDelta() );
 				updateTerrain();
-
 
 				render();
  			}
@@ -195,15 +275,6 @@
 
 
 
-		 function setSceneSize(){
- 		   sceneWidth = window.innerWidth;
- 			 sceneHeight = window.innerHeight;
- 		 }
-
-     function setCameraAspect(){
-			 aspect = sceneWidth/sceneHeight;
-			 if(CAMERA) CAMERA.aspect = aspect;
-		 }
 
 
 
@@ -211,75 +282,9 @@
 
 
 
-/*
-
-     - Update camera controls -
-		 Trying to smooth camera movement with cosine interpolation concepts
-
-		 double CosineInterpolate(
-				double y1,double y2,
-				double mu)
-		 {
-				double mu2;
-
-				mu2 = (1-cos(mu*PI))/2;
-				return(y1*(1-mu2)+y2*mu2);
-		 }
-
-*/
-     var timer = 0;
-		 var dof = Math.PI/-4; // degrees of freedom
-		 var interval = 5/1000;
-		 var positions = {
-			 x0: container.clientWidth/2,
-			 x1: 0,
-			 y0: container.clientHeight/2,
-			 y1: 0
-		 };
-
-		 function updateControls(delta){
-			 timer += delta;
-
-       positions.x1 = mouseX*dof;
-       positions.y1 = mouseY*dof;
-
-			 // CONTROLS.rotation.x = positions.y1;
-			 // CONTROLS.rotation.y = positions.x1;
-
-			 var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
-			 var rotX = (positions.y0*(1-mu2X)+positions.y1*mu2X);
-
-			 var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
-			 var rotY = (positions.x0*(1-mu2Y)+positions.x1*mu2Y);
-
-			 CONTROLS.rotation.x = rotX;
-			 CONTROLS.rotation.y = rotY;
-
-			 // degrees of freedom, in radians
-			 if(timer > interval){
-				 console.log('updating mouse');
-
-				 timer = 0;
-				 positions.x0 = positions.x1;
-	       positions.y0 = positions.y1;
-			 }
-		 }
 
 
 
-
-
-
-     function initCamera() {
-			 var geometry = new THREE.BoxBufferGeometry( 1, 1, 1 );
-       var material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
-       CONTROLS = new THREE.Mesh( geometry, material );
-
-			 CAMERA = new THREE.PerspectiveCamera( 60, aspect, 0.1, 1000 );
- 			 CONTROLS.position.set(0, 20, 400);
-			 CONTROLS.add(CAMERA);
-			 SCENE.add(CONTROLS);
-		 }
 
 
 
@@ -296,7 +301,6 @@
      function updateTerrain(){
 			 var rotZ = Math.PI/1000;
 			 if(!grabbing) objects.terrain.mesh.rotation.z += rotZ;
-
 
 		 }
 
