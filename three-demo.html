@@ -45,25 +45,26 @@
       // Element to render three js to
       var container = document.getElementById('scene');
 
+			// Constants
+			var SCENE, RENDERER;
+			SCENE = new THREE.Scene();
+
+			// vars
+			var controls, sceneWidth, sceneHeight, aspect, clock, mouseX, mouseY, grabbing, canvas, context, maxAnisotropy;
+
 			// Scene objects
 			var objects = {
-
 				terrain: {
 					mesh: undefined,
 					textureURL: 'file:///C:/Users/kpeterso/Desktop/threeJS/grass3.jpg',
 					materialProps: {color: 0xdfdfdf, side: THREE.DoubleSide, map: undefined, flatShading: true},
 					geometryProps: {width: 400, height: 400},
 				},
-
 			};
 
 
 
-			// CONSTANTS
-			var SCENE, CAMERA, RENDERER;
-			SCENE = new THREE.Scene();
-      // Global vars
-			var controls, sceneWidth, sceneHeight, aspect, clock, mouseX, mouseY, grabbing;
+
 
 
 
@@ -84,11 +85,18 @@
 
 			*/
 			function Controls(x, y, z){
+				this.x = x;
+				this.y = y;
+				this.z = z;
+				this.rotationY = 0; // angle of rotation in rads
 				this.camera = undefined;
+				this.cameraRotator = undefined;
+				this.rig = undefined;
 			  this.frames = 0;
 				this.delta = 0;
-				this.dof = Math.PI/-4;
+				this.dof = Math.PI/-16;
 				this.interval = 1/90;
+				this.dragStart = undefined;
 				this.lookPositions = {
 					x0: container.clientWidth/2,
 					x1: 0,
@@ -97,43 +105,73 @@
 				};
 				this.init = function(){
 					console.log(this);
-					this.geometry = new THREE.BoxBufferGeometry( 1, 1, 1 );
-					this.material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
-					this.mesh = new THREE.Mesh( this.geometry, this.material );
+					var geometry = new THREE.BoxBufferGeometry( 1, 1, 1 );
+					var material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
+					this.rig = new THREE.Mesh( geometry, material );
+					this.cameraRotator = new THREE.Mesh( geometry, material );
 					this.camera = new THREE.PerspectiveCamera( 60, aspect, 0.1, 1000 );
-					this.mesh.position.set(x, y, z);
-					this.mesh.add(this.camera);
-					SCENE.add(this.mesh);
+					// var pos = this.getPosition();
+					// this.mesh.position.set(pos.x, pos.y, pos.z);
+					this.cameraRotator.add(this.camera);
+					this.rig.add(this.cameraRotator);
+					SCENE.add(this.rig);
 				}
-				this.update = function(d){
-				  console.log('updating controls');
+				this.position = function(){
+          // this.x = Math.sin(this.rotationY)*this.z;
+					// return {x: this.x, y: this.y, z: this.z};
+          // this.x = Math.sin(this.rotationY)*this.z;
+					// this.z = Math.tan(this.rotationY)*this.x;
+					// this.y = Math.cos(this.rotationY)*this.x;
+					this.rig.position.set(this.x, this.y, this.z);
+				}
+				this.moveCamera = function(d){
 					this.delta += d;
 	        this.frames++;
 	        this.lookPositions.x1 = mouseX*this.dof;
 	        this.lookPositions.y1 = mouseY*this.dof;
-	 			 // CONTROLS.rotation.x = positions.y1;
-	 			 // CONTROLS.rotation.y = positions.x1;
+	 			  // CONTROLS.rotation.x = positions.y1;
+	 			  // CONTROLS.rotation.y = positions.x1;
+	 			  var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
+	 			  var rotX = (this.lookPositions.y0*(1-mu2X)+this.lookPositions.y1*mu2X);
+	 			  var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
+	 			  var rotY = (this.lookPositions.x0*(1-mu2Y)+this.lookPositions.x1*mu2Y);
 
-	 			 var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
-	 			 var rotX = (this.lookPositions.y0*(1-mu2X)+this.lookPositions.y1*mu2X);
+	 			  this.cameraRotator.rotation.x = rotX;
+	 			  this.cameraRotator.rotation.y = rotY;
 
-	 			 var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
-	 			 var rotY = (this.lookPositions.x0*(1-mu2Y)+this.lookPositions.x1*mu2Y);
-
-	 			 this.mesh.rotation.x = rotX;
-	 			 this.mesh.rotation.y = rotY;
-
-	 			 if(this.delta > this.interval){
-	         console.log(this.frames);
-	 				 this.delta = this.frames = 0;
-	 				 this.lookPositions.x0 = this.lookPositions.x1;
-	 	       this.lookPositions.y0 = this.lookPositions.y1;
-	 			 }
+	 			  if(this.delta > this.interval){
+	 				  this.delta = this.frames = 0;
+	 				  this.lookPositions.x0 = this.lookPositions.x1;
+	 	        this.lookPositions.y0 = this.lookPositions.y1;
+	 			  }
+				}
+				this.dragging = function(){
+          if(grabbing){
+						var startX = (this.dragStart+1)/2;
+						var newX = (mouseX+1)/2;
+						var rad = newX - startX;
+						console.log(rad);
+						this.rotationY = rad;
+						// this.camera.lookAt(objects.terrain.mesh.position);
+						// var normalize = (mouseX+1)/2;
+						// this.dragStart - 2
+						// var x = this.dragStart - mouseX;
+            // console.log(x);
+            // this.rotationY = x;
+						// var pos = this.getPosition();
+						// this.mesh.position.set(pos.x, pos.y, pos.z);
+					}
+				}
+				this.update = function(d){
+					if(!grabbing){
+						this.moveCamera(d);
+					}
+					else {
+						this.dragging();
+					}
+					this.position();
 				}
 			}
-
-
-
 
 
 			function setSceneSize(){
@@ -144,52 +182,7 @@
  			  aspect = sceneWidth/sceneHeight;
  			  if(controls) controls.camera.aspect = aspect;
  		  }
-
-
-
-			clock = new THREE.Clock();
-			setSceneSize();
-			setCameraAspect();
-
-			controls = new Controls(0, 20, 400);
-			controls.init();
-
-
-
-			var canvas = document.createElement('canvas');
-			var context = canvas.getContext('webgl2');
-			RENDERER = new THREE.WebGLRenderer({canvas: canvas, context: context});
-
-			RENDERER.setPixelRatio( window.devicePixelRatio );
-			RENDERER.setSize( sceneWidth, sceneHeight );
-			container.appendChild( RENDERER.domElement );
-
-			var maxAnisotropy = RENDERER.capabilities.getMaxAnisotropy();
-
-
-
-
-
-
-
-      // EVENTS
-			function onMousemove(e){
-        mouseX = (e.clientX - (container.clientWidth/2))/(container.clientWidth/2);
-				mouseY = (e.clientY - (container.clientHeight/2))/(container.clientHeight/2);
-			}
-			function onMousedown(){
-				grabbing = true;
-			}
-			function onMouseup(){
-				grabbing = false;
-			}
-
-
-			function onResize(){
-				console.log('resizing');
-				setSceneSize();
-				setCameraAspect();
-				CAMERA.updateProjectionMatrix();
+			function setRenderer(){
 				RENDERER.setSize( sceneWidth, sceneHeight );
 			}
 
@@ -197,10 +190,53 @@
 
 
 
+			setSceneSize();
+			setCameraAspect();
+			controls = new Controls(0, 0, 300);
+			controls.init();
+      initRenderer();
+
+
+			clock = new THREE.Clock();
+			mouseX = 0;
+			mouseY = 0;
 
 
 
 
+
+      // Event handlers
+			function onMousemove(e){
+        mouseX = (e.clientX - (container.clientWidth/2))/(container.clientWidth/2);
+				mouseY = (e.clientY - (container.clientHeight/2))/(container.clientHeight/2);
+			}
+			function onMousedown(){
+				grabbing = true;
+				controls.dragStart = mouseX;
+			}
+			function onMouseup(){
+				grabbing = false;
+			}
+			function onResize(){
+				setSceneSize();
+				setCameraAspect();
+				controls.camera.updateProjectionMatrix();
+				setRenderer();
+			}
+
+
+
+
+
+
+
+
+			/* App functions */
+      function startApp(){
+ 			  console.log('starting up application..');
+ 			  initScene();
+ 			  animate();
+ 		  }
 
 			function beginLoading(){
 				console.log('..begin loading materials');
@@ -230,14 +266,21 @@
 
 
 
+      function initRenderer(){
+				canvas = document.createElement('canvas');
+				context = canvas.getContext('webgl2');
+				RENDERER = new THREE.WebGLRenderer({canvas: canvas, context: context});
+				RENDERER.setPixelRatio( window.devicePixelRatio );
+				setRenderer();
+				container.appendChild( RENDERER.domElement );
+				maxAnisotropy = RENDERER.capabilities.getMaxAnisotropy();
+			}
 
 			function initScene(){
         // Add objects to scene
 				createTerrain();
  			  initLights();
-
-				// Config Camera
- 			  controls.camera.lookAt(objects.terrain.mesh.position);
+				controls.camera.lookAt(objects.terrain.mesh.position);
 
 				// Events
 				window.addEventListener('resize', onResize, false);
@@ -246,28 +289,29 @@
 				container.addEventListener('mouseup', onMouseup, false);
       }
 
+			function destroyScene(){
+				window.removeEventListener('resize', onResize, false);
+				container.removeEventListener('mousemove', onMousemove, false);
+				container.removeEventListener('mousedown', onMousedown, false);
+				container.removeEventListener('mouseup', onMouseup, false);
+			}
+
 
 
 
 			function render(){
 				RENDERER.render( SCENE, controls.camera );
 			}
+
  			function animate(){
  				requestAnimationFrame( animate );
-
         controls.update( clock.getDelta() );
 				updateTerrain();
-
 				render();
  			}
 
 
-     /* App functions */
-     function startApp(){
-			 console.log('starting up application..');
-			 initScene();
-			 animate();
-		 }
+
 
 
 
@@ -301,16 +345,17 @@
      function updateTerrain(){
 			 var rotZ = Math.PI/1000;
 			 if(!grabbing) objects.terrain.mesh.rotation.z += rotZ;
-
 		 }
 
+
+
+		 /*
+
+			 Elliptic paraboloid equation
+			 z = -x^2 + y^2
+
+		 */
      function createTerrain(){
-       /*
-
-			   Elliptic paraboloid equation
-				 z = -x^2 + y^2
-
-			 */
 			 var terrain, texture, gp, geometry, material, mesh;
 			 terrain = objects.terrain;
 			 texture = terrain.texture;
