@@ -12,6 +12,7 @@
 	      cursor: grab;
 	      cursor: -moz-grab;
 	      cursor: -webkit-grab;
+				background: #000;
 			}
 			canvas:active{
 				cursor: grabbing;
@@ -30,10 +31,9 @@
 
 		<!-- https://github.com/jackunion/tooloud -->
 		<script src="js/three.js"></script>
-		<script src="js/OrbitControls.js"></script>
 		<script src="js/WebGL.js"></script>
     <script src="js/tooloud.js"></script>
-		<script>
+		<script> // custom js
 
 
       // references
@@ -54,6 +54,13 @@
 
 			// Scene objects
 			var objects = {
+				particles: {
+					points: undefined,
+					count: 4000,
+					resetDepth: -300,
+					textureURL: 'file:///C:/Users/kpeterso/Desktop/threeJS/particle2.png',
+					materialProps: {color: 0xf9f9f9, size: 6, blending: THREE.AdditiveBlending, map: undefined, transparent: true, opacity: .45},
+				},
 				terrain: {
 					mesh: undefined,
 					textureURL: 'file:///C:/Users/kpeterso/Desktop/threeJS/grass3.jpg',
@@ -152,14 +159,7 @@
 						var rad = newX - startX;
 						console.log(rad);
 						this.rotationY = rad;
-						// this.camera.lookAt(objects.terrain.mesh.position);
-						// var normalize = (mouseX+1)/2;
-						// this.dragStart - 2
-						// var x = this.dragStart - mouseX;
-            // console.log(x);
-            // this.rotationY = x;
-						// var pos = this.getPosition();
-						// this.mesh.position.set(pos.x, pos.y, pos.z);
+
 					}
 				}
 				this.update = function(d){
@@ -183,7 +183,7 @@
  			  if(controls) controls.camera.aspect = aspect;
  		  }
 			function setRenderer(){
-				RENDERER.setSize( sceneWidth, sceneHeight );
+				RENDERER.setSize(sceneWidth, sceneHeight);
 			}
 
 
@@ -240,17 +240,23 @@
 
 			function beginLoading(){
 				console.log('..begin loading materials');
-				// if the object has a texture, load images then create material for that object
 				var loader = new THREE.TextureLoader();
-				// loader.setCrossOrigin(null);
+
+				var totalResources = Object.keys(objects).length,
+				resourcesLoaded = 0;
+				// if the object has a texture, load images then create material for that object
 				// load a resource
 				for(var obj in objects){
-					if(objects[obj].textureURL){
-						loader.load(objects[obj].textureURL,
+					var object = objects[obj];
+					if(object.textureURL){
+					var loadTexture = function(o){
+						loader.load(o.textureURL,
 						  // onLoad
 						  function (texture) {
-							  objects[obj].texture = texture;
-								startApp();
+								console.log(o);
+							  o.texture = texture;
+								resourcesLoaded ++;
+								if(resourcesLoaded >= totalResources) startApp();
 						  },
 						  // onProgress
 						  undefined,
@@ -260,6 +266,8 @@
 							  console.error( 'An error happened.' );
 						  }
 					  );
+					}
+					loadTexture(object);
 					}
 				}
 			}
@@ -278,8 +286,9 @@
 
 			function initScene(){
         // Add objects to scene
-				createTerrain();
  			  initLights();
+				createTerrain();
+				createParticles();
 				controls.camera.lookAt(objects.terrain.mesh.position);
 
 				// Events
@@ -305,8 +314,12 @@
 
  			function animate(){
  				requestAnimationFrame( animate );
-        controls.update( clock.getDelta() );
+				var delta = clock.getDelta();
+        controls.update( delta );
+
+        updateParticles();
 				updateTerrain();
+
 				render();
  			}
 
@@ -341,13 +354,53 @@
 
 
 
+		 function updateParticles() {
+			 var particles = objects.particles;
+		   particles.points.rotation.y += .00025;
+       var count = particles.count;
+			 while(count--) {
+				 var particle = particles.points.geometry.vertices[count];
+				 if (particle.y < particles.resetDepth) {
+					 particle.y = 300;
+           particle.velocity.y = 0;
+				 }
+				 particle.velocity.y -= Math.random()*.005;
+				 particle.add(particle.velocity);
+			 }
+			 particles.points.geometry.verticesNeedUpdate = true;
+		 }
+
+     // http://thegregstier.appspot.com/particles/js/particles.js
+		 // https://aerotwist.com/tutorials/creating-particles-with-three-js/
+     function createParticles() {
+		   var particleCount = objects.particles.count;
+			 var particleGeometry = new THREE.Geometry();
+       for (var i = 0; i < particleCount; i++){
+				 var velocity = new THREE.Vector3((Math.random() * 2 - 1) * .5, -Math.random() * .15, 0);
+				 var x = Math.random() * 1000 - 500,
+				 y = Math.random() * 1000 - 500,
+				 z = Math.random() * 1000 - 500,
+				 particle = new THREE.Vector3(x, y, z);
+				 particle.velocity = velocity;
+				 particleGeometry.vertices.push(particle);
+			 }
+			 console.log(objects.particles.texture);
+			 objects.particles.materialProps.map = objects.particles.texture;
+			 console.log(objects.particles);
+			 var particleMaterial = new THREE.PointsMaterial(objects.particles.materialProps)
+			 objects.particles.points = new THREE.Points(particleGeometry, particleMaterial);
+			 SCENE.add(objects.particles.points);
+		 }
+
+
+
+
+
 
      function updateTerrain(){
 			 var rotZ = Math.PI/1000;
 			 if(!grabbing) objects.terrain.mesh.rotation.z += rotZ;
 		 }
-
-
 
 		 /*
 
