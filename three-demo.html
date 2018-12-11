@@ -12,7 +12,11 @@
 	      cursor: grab;
 	      cursor: -moz-grab;
 	      cursor: -webkit-grab;
-				background: #000;
+				background: #D4C1EC; /* Old browsers */
+			  background: -moz-linear-gradient(top,  #D4C1EC 0%, #FFCAAF 100%); /* FF3.6-15 */
+			  background: -webkit-linear-gradient(top,  #D4C1EC 0%,#FFCAAF 100%); /* Chrome10-25,Safari5.1-6 */
+			  background: linear-gradient(to bottom,  #D4C1EC 0%,#FFCAAF 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
+			  filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#D4C1EC', endColorstr='#FFCAAF',GradientType=0 ); /* IE6-9 */
 			}
 			canvas:active{
 				cursor: grabbing;
@@ -32,7 +36,8 @@
 		<!-- https://github.com/jackunion/tooloud -->
 		<script src="js/three.js"></script>
 		<script src="js/WebGL.js"></script>
-    <script src="js/tooloud.js"></script>
+		<script src="js/tooloud.js"></script>
+    <script src="js/GLTFLoader.js"></script>
 		<script> // custom js
 
 
@@ -50,22 +55,35 @@
 			SCENE = new THREE.Scene();
 
 			// vars
-			var controls, sceneWidth, sceneHeight, aspect, clock, mouseX, mouseY, grabbing, canvas, context, maxAnisotropy;
+			var assetLoader, controls, sceneWidth, sceneHeight, aspect, clock, mouseX, mouseY, grabbing, canvas, context, maxAnisotropy;
 
-			// Scene objects
+
+
+
+			/*
+
+			  Scene objects
+
+			*/
+			var portal;
 			var objects = {
+				// snow particles
 				particles: {
 					points: undefined,
 					count: 4000,
 					resetDepth: -300,
-					textureURL: 'file:///C:/Users/kpeterso/Desktop/threeJS/particle2.png',
+					textureURL: '/particle2.png',
+					textures: {snowflake: '/particle2.png'},
 					materialProps: {color: 0xf9f9f9, size: 6, blending: THREE.AdditiveBlending, map: undefined, transparent: true, opacity: .45},
 				},
+				// mountains/terrain
 				terrain: {
 					mesh: undefined,
-					textureURL: 'file:///C:/Users/kpeterso/Desktop/threeJS/grass3.jpg',
-					materialProps: {color: 0xdfdfdf, side: THREE.DoubleSide, map: undefined, flatShading: true},
-					geometryProps: {width: 400, height: 400},
+					textureURL: '/snow.jpg',
+					textures: {snowyMountain: '/snow.jpg'},
+					images: {heightmap: '/heightmap_101x101.png'},
+					materialProps: {color: 0xdfdfdf, side: THREE.DoubleSide, map: undefined, flatShading: true, combine: THREE.Multiply},
+					geometryProps: {width: 1000, height: 1000},
 				},
 			};
 
@@ -73,6 +91,125 @@
 
 
 
+      /*
+
+				AssetLoader loads all scene dependencies:
+				imgs, textures, and 3d models
+				Fires startApp after all objest and assets are loaded
+
+			*/
+			function AssetLoader(){
+				this.objects = undefined;
+				this.textureLoader = new THREE.TextureLoader();
+				this.objectsNames = Object.keys(objects)
+				this.objectsTotal = this.objectsNames.length;
+				this.objectsLoaded = 0;
+        this.assetsArr = [];
+
+        this.objFinished = function(){
+					this.objectsLoaded ++;
+					if(this.objectsLoaded >= this.objectsTotal){
+						console.log('Finished loading all objects');
+						startApp();
+						console.log(this.objects);
+					}
+				}
+        this.assetFinished = function(config){
+					this.assetsArr[config.arrIndex].objLoadedAssets ++;
+					if(this.assetsArr[config.arrIndex].objLoadedAssets >= this.assetsArr[config.arrIndex].objAssets){
+						this.objFinished();
+					}
+				}
+        this.loadTextures = function(config){
+					var assetLoader = this;
+					var texturesLoaded = 0;
+					var textureName = Object.keys(config.obj.textures);
+					var textureSrc = Object.values(config.obj.textures);
+					var texturesTotal = textureName.length;
+
+					for(var i = 0; i < texturesTotal; i++){
+						var loadTexture = function(loader, name){
+						  loader.load(config.obj.textures[name],
+						  // onLoad
+						  function (texture) {
+						  	assetLoader.objects[config.key].textures[name] = texture;
+						  	texturesLoaded ++;
+						  	if(texturesLoaded >= texturesTotal){
+						  		console.log('Texture done loading');
+						  		assetLoader.assetFinished(config);
+						  	}
+						  },
+						  // onProgress
+						  undefined,
+						  // onError
+						  function ( err ) {
+						  	console.log(err);
+						  	console.error( 'An error occurred while loading a texture asset' );
+						  });
+				    }
+				    loadTexture(this.textureLoader, textureName[i]);
+					}
+				}
+
+				this.loadImages = function(config){
+					var assetLoader = this;
+					var imagesLoaded = 0;
+					var imageName = Object.keys(config.obj.images);
+		      var imageUrls = Object.values(config.obj.images);
+					var totalImages = imageName.length;
+
+					for(var i = 0; i < totalImages; i++){
+						var src = imageUrls[i];
+						var img = new Image();
+						var allImagesLoaded = function(){
+							console.log('All images loaded');
+							assetLoader.assetFinished(config);
+						}
+						img.onload = function () {
+		          assetLoader.objects[config.key].images[imageName[imagesLoaded]] = img;
+							imagesLoaded++;
+							if(i >= totalImages) allImagesLoaded();
+						}
+						img.onerror = function() {
+							console.error('An error occurred while loading an image asset');
+						}
+					  img.src = src;
+					}
+				}
+
+				this.countAssets = function(obj){
+					var assets = 0
+					if(obj.textures) assets += Object.keys(obj.textures).length;
+					if(obj.images) assets += Object.keys(obj.images).length;
+					return assets;
+				}
+				this.loadAssets = function(config){
+					// loads asset of a single objects
+					// Textures
+					if(config.obj.textures) this.loadTextures(config);
+					// Images
+					if(config.obj.images) this.loadImages(config);
+				}
+
+				// Fired once at the beginning of the app,
+				// expects scene objects variable to determine which assets need to be loaded
+				this.beginLoading = function(objects){
+					this.objects = objects;
+					console.log('Starting to load scene objects and assets..');
+					for(var i = 0; i < this.objectsTotal; i++){
+					  var object = this.objects[this.objectsNames[i]];
+						var assets = this.countAssets(object);
+						this.assetsArr[i] = {
+							key: this.objectsNames[i],
+							arrIndex: i,
+						  obj: object,
+							objLoadedAssets: 0,
+							objAssets: assets,
+						};
+						this.loadAssets(this.assetsArr[i]);
+					}
+				}
+			}
 
 
 			/*
@@ -98,12 +235,14 @@
 				this.rotationY = 0; // angle of rotation in rads
 				this.camera = undefined;
 				this.cameraRotator = undefined;
+				this.cameraVelocity = 150;
 				this.rig = undefined;
 			  this.frames = 0;
 				this.delta = 0;
-				this.dof = Math.PI/-16;
+				this.dof = Math.PI;
 				this.interval = 1/90;
 				this.dragStart = undefined;
+				this.focus = new THREE.Vector3(0,0,0);
 				this.lookPositions = {
 					x0: container.clientWidth/2,
 					x1: 0,
@@ -111,69 +250,69 @@
 					y1: 0
 				};
 				this.init = function(){
-					console.log(this);
 					var geometry = new THREE.BoxBufferGeometry( 1, 1, 1 );
 					var material = new THREE.MeshBasicMaterial( {color: 0x00ff00} );
 					this.rig = new THREE.Mesh( geometry, material );
 					this.cameraRotator = new THREE.Mesh( geometry, material );
-					this.camera = new THREE.PerspectiveCamera( 60, aspect, 0.1, 1000 );
-					// var pos = this.getPosition();
-					// this.mesh.position.set(pos.x, pos.y, pos.z);
+					this.camera = new THREE.PerspectiveCamera( 60, aspect, 0.1, 1500 );
 					this.cameraRotator.add(this.camera);
 					this.rig.add(this.cameraRotator);
 					SCENE.add(this.rig);
-				}
-				this.position = function(){
-          // this.x = Math.sin(this.rotationY)*this.z;
-					// return {x: this.x, y: this.y, z: this.z};
-          // this.x = Math.sin(this.rotationY)*this.z;
-					// this.z = Math.tan(this.rotationY)*this.x;
-					// this.y = Math.cos(this.rotationY)*this.x;
 					this.rig.position.set(this.x, this.y, this.z);
+
 				}
-				this.moveCamera = function(d){
-					this.delta += d;
-	        this.frames++;
-	        this.lookPositions.x1 = mouseX*this.dof;
-	        this.lookPositions.y1 = mouseY*this.dof;
-	 			  // CONTROLS.rotation.x = positions.y1;
-	 			  // CONTROLS.rotation.y = positions.x1;
-	 			  var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
-	 			  var rotX = (this.lookPositions.y0*(1-mu2X)+this.lookPositions.y1*mu2X);
-	 			  var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
-	 			  var rotY = (this.lookPositions.x0*(1-mu2Y)+this.lookPositions.x1*mu2Y);
+				this.moveRig = function(){
+	        // this.lookPositions.x1 = mouseX*this.dof;
+	        // this.lookPositions.y1 = mouseY*this.dof;
+	 			  // var mu2X = (1-Math.cos(mouseY*Math.PI))/2;
+	 			  // var rotX = (this.lookPositions.y0*(1-mu2X)+this.lookPositions.y1*mu2X);
+	 			  // var mu2Y = (1-Math.cos(mouseX*Math.PI))/2;
+	 			  // var rotY = (this.lookPositions.x0*(1-mu2Y)+this.lookPositions.x1*mu2Y);
+					//
+	 			  // this.cameraRotator.rotation.x = rotX;
+	 			  // this.cameraRotator.rotation.y = rotY;
 
-	 			  this.cameraRotator.rotation.x = rotX;
-	 			  this.cameraRotator.rotation.y = rotY;
+					// distance formula to get x and z
+					//    _______________________
+					//   √ (x2−x1)^2 + (y2−y1)^2  = distance
 
-	 			  if(this.delta > this.interval){
-	 				  this.delta = this.frames = 0;
-	 				  this.lookPositions.x0 = this.lookPositions.x1;
-	 	        this.lookPositions.y0 = this.lookPositions.y1;
-	 			  }
+					this.cameraRotator.position.x += (( mouseX*Math.cos(this.dof*2)*this.cameraVelocity) - this.cameraRotator.position.x)* 0.05;
+					this.cameraRotator.position.y += (( -mouseY*Math.sin(this.dof/4)*this.cameraVelocity) - this.cameraRotator.position.y)* 0.05;
 				}
 				this.dragging = function(){
           if(grabbing){
 						var startX = (this.dragStart+1)/2;
 						var newX = (mouseX+1)/2;
 						var rad = newX - startX;
-						console.log(rad);
 						this.rotationY = rad;
-
 					}
 				}
 				this.update = function(d){
+					this.delta += d;
+	        this.frames++;
+
 					if(!grabbing){
-						this.moveCamera(d);
+						this.moveRig();
+						this.camera.lookAt(this.focus);
 					}
 					else {
 						this.dragging();
 					}
-					this.position();
+
+					if(this.delta > this.interval){
+	 				  this.delta = this.frames = 0;
+	 			  }
 				}
 			}
 
 
+
+
+      /*
+
+			  Set up scene for viewport
+
+			*/
 			function setSceneSize(){
   		  sceneWidth = window.innerWidth;
   		  sceneHeight = window.innerHeight;
@@ -190,16 +329,20 @@
 
 
 
-			setSceneSize();
-			setCameraAspect();
-			controls = new Controls(0, 0, 300);
-			controls.init();
-      initRenderer();
+
 
 
 			clock = new THREE.Clock();
 			mouseX = 0;
 			mouseY = 0;
+
+			setSceneSize();
+			setCameraAspect();
+
+			controls = new Controls(0, 50, 250);
+			controls.init();
+
+      initRenderer();
 
 
 
@@ -238,38 +381,37 @@
  			  animate();
  		  }
 
-			function beginLoading(){
-				console.log('..begin loading materials');
-				var loader = new THREE.TextureLoader();
 
-				var totalResources = Object.keys(objects).length,
-				resourcesLoaded = 0;
-				// if the object has a texture, load images then create material for that object
-				// load a resource
-				for(var obj in objects){
-					var object = objects[obj];
-					if(object.textureURL){
-					var loadTexture = function(o){
-						loader.load(o.textureURL,
-						  // onLoad
-						  function (texture) {
-								console.log(o);
-							  o.texture = texture;
-								resourcesLoaded ++;
-								if(resourcesLoaded >= totalResources) startApp();
-						  },
-						  // onProgress
-						  undefined,
-						  // onError
-						  function ( err ) {
-								console.log(err);
-							  console.error( 'An error happened.' );
-						  }
-					  );
+
+			function loadGLTFs(){
+				// Instantiate a loader
+				var loader = new THREE.GLTFLoader();
+				// Load a glTF resource
+				loader.load(
+					// resource URL
+					'/stoneGate.gltf',
+					// called when the resource is loaded
+					function ( gltf ) {
+						// scene.add( gltf.scene );
+						portal = gltf.scene;
+						console.log(portal);
+						beginLoading();
+						// gltf.animations; // Array<THREE.AnimationClip>
+						// gltf.scene; // THREE.Scene
+						// gltf.scenes; // Array<THREE.Scene>
+						// gltf.cameras; // Array<THREE.Camera>
+						// gltf.asset; // Object
+					},
+					// called while loading is progressing
+					function ( xhr ) {
+						console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+					},
+					// called when loading has errors
+					function ( error ) {
+						console.log( 'An error happened' );
+            console.log(error)
 					}
-					loadTexture(object);
-					}
-				}
+				);
 			}
 
 
@@ -283,13 +425,19 @@
 				container.appendChild( RENDERER.domElement );
 				maxAnisotropy = RENDERER.capabilities.getMaxAnisotropy();
 			}
-
+      function updateScene(){
+				var rotY = Math.PI/4;
+ 			  if(!grabbing) SCENE.rotation.y += rotY;
+			}
 			function initScene(){
         // Add objects to scene
  			  initLights();
-				createTerrain();
+        createTerrain();
 				createParticles();
-				controls.camera.lookAt(objects.terrain.mesh.position);
+				// createPortal();
+
+        SCENE.fog = new THREE.FogExp2( 0xefd1b5, 0.00178, 1000 );
+				// controls.camera.lookAt(objects.terrain.mesh.position);
 
 				// Events
 				window.addEventListener('resize', onResize, false);
@@ -318,8 +466,8 @@
         controls.update( delta );
 
         updateParticles();
-				updateTerrain();
-
+				// updateTerrain();
+        updateScene();
 				render();
  			}
 
@@ -346,10 +494,13 @@
 
 
      function initLights() {
-			 var light = new THREE.PointLight( 0xffffff, 2, 300 );
-       light.position.set( 0, 100, 0 );
+			 var light = new THREE.PointLight( 0xffffff, 2, 500 );
+       light.position.set( 0, 300, 0 );
        light.castShadow = true;
+
+			 var globalLight = new THREE.AmbientLight( 0x404040, 2 );
        SCENE.add( light );
+			 SCENE.add(globalLight);
 		 }
 
 
@@ -362,9 +513,9 @@
 				 var particle = particles.points.geometry.vertices[count];
 				 if (particle.y < particles.resetDepth) {
 					 particle.y = 300;
-           particle.velocity.y = 0;
+           particle.velocity = new THREE.Vector3((Math.random() * 2 - 1) * .5, -Math.random() * .15, (Math.random() * 2 - 1) * .5);
 				 }
-				 particle.velocity.y -= Math.random()*.005;
+				 particle.velocity.y -= Math.random()*.001;
 				 particle.add(particle.velocity);
 			 }
 			 particles.points.geometry.verticesNeedUpdate = true;
@@ -376,16 +527,15 @@
 		   var particleCount = objects.particles.count;
 			 var particleGeometry = new THREE.Geometry();
        for (var i = 0; i < particleCount; i++){
-				 var velocity = new THREE.Vector3((Math.random() * 2 - 1) * .5, -Math.random() * .15, 0);
-				 var x = Math.random() * 1000 - 500,
-				 y = Math.random() * 1000 - 500,
-				 z = Math.random() * 1000 - 500,
+				 var velocity = new THREE.Vector3((Math.random() * 2 - 1) * .5, -Math.random() * .15, (Math.random() * 2 - 1) * .5);
+				 var x = Math.random() * 600 - 300;
+				 var y = Math.random() * 600 - 300;
+				 var z = Math.random() * 600 - 300;
 				 particle = new THREE.Vector3(x, y, z);
 				 particle.velocity = velocity;
 				 particleGeometry.vertices.push(particle);
 			 }
-			 console.log(objects.particles.texture);
-			 objects.particles.materialProps.map = objects.particles.texture;
+			 objects.particles.materialProps.map = objects.particles.textures.snowflake;
 			 console.log(objects.particles);
 			 var particleMaterial = new THREE.PointsMaterial(objects.particles.materialProps)
 			 objects.particles.points = new THREE.Points(particleGeometry, particleMaterial);
@@ -398,10 +548,39 @@
 
 
      function updateTerrain(){
-			 var rotZ = Math.PI/1000;
-			 if(!grabbing) objects.terrain.mesh.rotation.z += rotZ;
+			 // var rotZ = Math.PI/4.5e3;
+			 // if(!grabbing) objects.terrain.mesh.rotation.z += rotZ;
 		 }
+		 //return array with height data from img
+		 function getHeightData(img,scale) {
 
+		  if (scale == undefined) scale=1;
+
+		     var canvas = document.createElement( 'canvas' );
+		     canvas.width = img.width;
+		     canvas.height = img.height;
+		     var context = canvas.getContext( '2d' );
+
+		     var size = img.width * img.height;
+		     var data = new Float32Array( size );
+
+		     context.drawImage(img,0,0);
+
+		     for ( var i = 0; i < size; i ++ ) {
+		         data[i] = 0
+		     }
+
+		     var imgd = context.getImageData(0, 0, img.width, img.height);
+		     var pix = imgd.data;
+
+		     var j=0;
+		     for (var i = 0; i<pix.length; i +=4) {
+		         var all = pix[i]+pix[i+1]+pix[i+2];
+		         data[j++] = all/(12*scale);
+		     }
+
+		     return data;
+		 }
 		 /*
 
 			 Elliptic paraboloid equation
@@ -411,36 +590,81 @@
      function createTerrain(){
 			 var terrain, texture, gp, geometry, material, mesh;
 			 terrain = objects.terrain;
-			 texture = terrain.texture;
+
+			 var data = getHeightData(terrain.images.heightmap, .1095);
+
+			 texture = terrain.textures.snowyMountain;
 			 texture.needsUpdate = true;
 			 texture.anisotropy = maxAnisotropy;
 			 texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-			 texture.repeat.set(50,50);
+			 texture.repeat.set(8,8);
 			 gp = terrain.geometryProps;
-			 geometry = new THREE.PlaneGeometry( gp.width, gp.height, gp.width/2.5, gp.height/2.5 );
+			 geometry = new THREE.PlaneGeometry( gp.width, gp.height, 100, 100 );
 			 terrain.materialProps.map = texture;
        material = new THREE.MeshLambertMaterial( terrain.materialProps );
 			 geometry.verticesNeedUpdate = true;
 
-       var s = 18;
+			 // var dist = 70;
+			 // var height = 12;
+       // var center = [0,0,0];
+
 
 			 for (let i = 0; i < geometry.vertices.length; i++){
 				 var vert = geometry.vertices[i];
-				 vert.z = Math.pow(-vert.x/s, 2) + Math.pow(vert.y/s, 2);
-				 vert.z += tooloud.Perlin.noise(vert.x * .125, vert.y * .03, vert.z * .01)*10;
-				 vert.z += tooloud.Perlin.noise(vert.x * .05, vert.y * .05, vert.z * .01)*20;
+				 vert.z = data[i];
 			 }
+
+         // var radius = Math.sqrt(Math.pow((vert.x - 0), 2) + Math.pow((vert.y - 0), 2));
+         // vert.z = (Math.sin( radius * .04 ) + 2 ) * 10 +2;
+
+
+
+				 // var s = 18;
+
+				 // elliptic paraboloid
+				 // vert.z = Math.pow(-vert.x/s, 2) + Math.pow(vert.y/s, 2);
+				 //
+				 // // noise
+				 // vert.z += tooloud.Perlin.noise(vert.x * .125, vert.y * .03, vert.z * .01)*10;
+				 // vert.z += tooloud.Perlin.noise(vert.x * .05, vert.y * .05, vert.z * .01)*20;
+				 //
+				 // // raised platform
+				 // if(Math.sqrt(Math.pow(vert.x - center[0], 2) + Math.pow(vert.y - center[1], 2)) <= dist) vert.z = height;
+				 //
+				 // // more noise
+				 // vert.z += tooloud.Perlin.noise(vert.x * .04, vert.y * .06, vert.z * .01)*4;
+				 // vert.z += tooloud.Perlin.noise(vert.x * .04, vert.y * .06, vert.z * .01)*2;
+
+
        mesh = new THREE.Mesh( geometry, material );
-			 mesh.rotation.x = 90;
-			 mesh.position.set(0,0,0);
+			 mesh.rotation.x = Math.PI / 2;
+			 mesh.rotation.z = - Math.PI / 8;
+			 mesh.position.set(-30,62,0);
+			 geometry.computeVertexNormals();
+
 			 objects.terrain.mesh = mesh;
 			 // var helper = new THREE.VertexNormalsHelper( mesh, 2, 0x00ff00, 1 );
 			 SCENE.add(mesh);
-			 // SCENE.add(helper);
+			 return mesh;
+
 		 }
 
 
+     function createPortal() {
+			 // objects.terrain.mesh.add(portal);
+			 // portal.scale
+			 var geometry = new THREE.BoxGeometry( 10, 20, 10 );
+       var material = new THREE.MeshLambertMaterial( {color: 0x00ff00} );
+       var pillar = new THREE.Mesh( geometry, material );
+			 // SCENE.add(pillar);
+			 SCENE.add(portal);
+			 // portal.rotation.x = Math.PI / 2;
+			 pillar.position.set(0,0,0);
+			 portal.position.set(0,-15,0);
+			 portal.scale.set(26, 26, 26);
 
+			  // = new THREE.Vector3(100,100,100);
+		 }
 
 
 
@@ -449,7 +673,9 @@
 		 if ( WEBGL.isWebGLAvailable() === false ) {
 			 document.body.appendChild( WEBGL.getWebGLErrorMessage() );
 		 }else{
-			 beginLoading();
+			 // loadGLTFs();
+			 assetLoader = new AssetLoader();
+			 assetLoader.beginLoading(objects);
 		 }
 
 
